@@ -1,0 +1,48 @@
+import pickle
+import re
+from collections import defaultdict
+from pathlib import Path
+import string
+from typing import Any
+
+
+class InvertedIndex:
+    def __init__(self, stopwords=None, stemmer=None):
+        self.index = defaultdict(set)
+        self.docmap = {}
+        self.stopwords = stopwords or []
+        self.stemmer = stemmer
+    
+    def __add_document(self, doc_id: int, text: str) -> None:
+        tokens = self.__tokenize(text)
+        for token in tokens:
+            self.index[token].add(doc_id)
+
+    def __tokenize(self, text: str) -> list[str]:
+        import string
+        translator = str.maketrans('', '', string.punctuation)
+        clean_text = text.translate(translator).lower()
+        tokens = [t for t in clean_text.split() if t and t not in self.stopwords]
+        if self.stemmer:
+            tokens = [self.stemmer.stem(t) for t in tokens]
+        return tokens
+
+    def get_documents(self, term: str) -> list[int]:
+        return sorted(self.index.get(term.lower(), set()))
+
+    def build(self, movies: list[dict[str, Any]]) -> None:
+        for m in movies:
+            doc_id = int(m["id"])
+            self.docmap[doc_id] = m
+            text = f"{m['title']} {m['description']}"
+            self.__add_document(doc_id, text)
+
+    def save(self) -> None:
+        cache_dir = Path("cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        with open(cache_dir / "index.pkl", "wb") as f:
+            pickle.dump(dict(self.index), f)
+
+        with open(cache_dir / "docmap.pkl", "wb") as f:
+            pickle.dump(self.docmap, f)
