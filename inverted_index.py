@@ -1,5 +1,5 @@
 import pickle
-from collections import defaultdict
+from collections import defaultdict, Counter
 from pathlib import Path
 from typing import Any
 
@@ -10,11 +10,14 @@ class InvertedIndex:
         self.docmap = {}
         self.stopwords = stopwords or []
         self.stemmer = stemmer
+        self.term_freqs = Counter()
     
     def __add_document(self, doc_id: int, text: str) -> None:
         tokens = self.__tokenize(text)
         for token in tokens:
             self.index[token].add(doc_id)
+            self.term_freqs[token] += 1
+        
 
     def __tokenize(self, text: str) -> list[str]:
         import string
@@ -27,6 +30,20 @@ class InvertedIndex:
 
     def get_documents(self, term: str) -> list[int]:
         return sorted(self.index.get(term.lower(), set()))
+
+    def get_tf(self, doc_id: int, term: str) -> int:
+        term_tokens = self.__tokenize(term)
+        if len(term_tokens) != 1:
+            raise ValueError("term must tokenize to exactly one token")
+
+        movie = self.docmap.get(doc_id)
+        if not movie:
+            return 0
+
+        token = term_tokens[0]
+        text = f"{movie['title']} {movie['description']}"
+        doc_tokens = self.__tokenize(text)
+        return doc_tokens.count(token)
 
     def build(self, movies: list[dict[str, Any]]) -> None:
         for m in movies:
@@ -44,11 +61,15 @@ class InvertedIndex:
 
         with open(cache_dir / "docmap.pkl", "wb") as f:
             pickle.dump(self.docmap, f)
+
+        with open(cache_dir / "term_freqs.pkl", "wb") as f:
+            pickle.dump(self.term_freqs, f)
+
     def load(self) -> None:
         cache_dir = Path("cache")
         index_path = cache_dir / "index.pkl"
         docmap_path = cache_dir / "docmap.pkl"
-        
+        term_freqs_path = cache_dir / "term_freqs.pkl"
         if not index_path.exists() or not docmap_path.exists():
             raise FileNotFoundError("Cache files not found. Please run 'build' first.")
 
@@ -60,3 +81,7 @@ class InvertedIndex:
 
         with open(docmap_path, "rb") as f:
             self.docmap = pickle.load(f)
+        if term_freqs_path.exists():
+            with open(term_freqs_path, "rb") as f:
+                self.term_freqs = pickle.load(f)
+        

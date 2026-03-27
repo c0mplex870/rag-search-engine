@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import string
 from pathlib import Path
 from nltk.stem import PorterStemmer
@@ -22,7 +23,19 @@ def main() -> None:
 
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
+    
     build_parser = subparsers.add_parser("build", help="Build the inverted index")
+    
+    tf_parser = subparsers.add_parser("tf", help="Get term frequency for a document")
+    tf_parser.add_argument("doc_id", type=int, help="Document ID")
+    tf_parser.add_argument("term", type=str, help="Term to query")
+    
+    idf_parser = subparsers.add_parser("idf", help="Get inverse document frequency for a term")
+    idf_parser.add_argument("term", type=str, help="Term to query")
+    
+    tfidf_parser = subparsers.add_parser("tfidf", help="Get TF-IDF score for a term in a document")
+    tfidf_parser.add_argument("doc_id", type=int, help="Document ID")
+    tfidf_parser.add_argument("term", type=str, help="Term to query")
     
     args = parser.parse_args()
     
@@ -71,6 +84,66 @@ def main() -> None:
             for i, doc_id in enumerate(sorted(matched_doc_ids)[:5], 1):
                 title = idx.docmap[doc_id]["title"]
                 print(f"{i}. {title} (ID: {doc_id})")
+        case "tf":
+            idx = InvertedIndex(stopwords, stemmer)
+            try:
+                idx.load()
+            except FileNotFoundError as e:
+                print(f"Error: {e}")
+                return
+
+            try:
+                tf = idx.get_tf(args.doc_id, args.term)
+            except ValueError as e:
+                print(f"Error: {e}")
+                return
+
+            print(tf)
+        case "idf":
+            idx = InvertedIndex(stopwords, stemmer)
+            try:
+                idx.load()
+            except FileNotFoundError as e:
+                print(f"Error: {e}")
+                return
+
+            term_tokens = normalize_text(args.term, stopwords, stemmer)
+            if len(term_tokens) != 1:
+                print("Error: term must tokenize to exactly one token")
+                return
+
+            token = term_tokens[0]
+            total_doc_count = len(idx.docmap)
+            term_match_doc_count = len(idx.index.get(token, set()))
+            idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
+
+            print(f"Inverse document frequency of '{args.term}': {idf:.2f}")
+        case "tfidf":
+            idx = InvertedIndex(stopwords, stemmer)
+            try:
+                idx.load()
+            except FileNotFoundError as e:
+                print(f"Error: {e}")
+                return
+
+            term_tokens = normalize_text(args.term, stopwords, stemmer)
+            if len(term_tokens) != 1:
+                print("Error: term must tokenize to exactly one token")
+                return
+
+            try:
+                tf = idx.get_tf(args.doc_id, args.term)
+            except ValueError as e:
+                print(f"Error: {e}")
+                return
+
+            docmap = idx.docmap
+            total_doc_count = len(docmap)
+            term_match_doc_count = len(idx.index.get(term_tokens[0], set()))
+            idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
+            tf_idf = (tf * idf)
+            
+            print(f"TF-IDF score of '{args.term}' in document '{args.doc_id}': {tf_idf:.2f}")
         case _:
             parser.print_help()
 
