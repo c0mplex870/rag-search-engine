@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from sentence_transformers import SentenceTransformer
@@ -121,3 +122,29 @@ def cosine_similarity(vec1, vec2):
         return 0.0
 
     return dot_product / (norm1 * norm2)
+
+def semantic_chunk(text: str, max_chunk_size: int, overlap: int) -> list[str]:
+    """Split text into chunks by sentences with optional overlap.
+    
+    Args:
+        text: The text to chunk
+        max_chunk_size: Maximum number of sentences per chunk
+        overlap: Number of overlapping sentences between chunks
+    
+    Returns:
+        A list of chunk strings
+    """
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    chunks = []
+    step = max(1, max_chunk_size - overlap)
+    
+    for i in range(0, len(sentences), step):
+        chunk = sentences[i : i + max_chunk_size]
+        chunks.append(" ".join(chunk))
+        
+        if i + max_chunk_size >= len(sentences):
+            break
+    
+    return chunks
